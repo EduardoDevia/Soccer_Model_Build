@@ -4,10 +4,22 @@
 #===============================================================================
 
 #===============================================================================
+#===============================================================================
+#===================1.Preprocessing ============================================
+#===================2.Machine Learning Prediction Classification================
+#===================3.Optimization Using Operations Research====================
+#===============================================================================
+#===============================================================================
+
+
+
+
+#===============================================================================
 #==============================1.Preprocessing =================================
 #===============================================================================
 #==============================Increase the Java memory=========================
 options(java.parameters = "-Xmx12g")
+setwd("C:/Users/chedevia/Desktop/Test")
 #======================Load Libraries to use SQL================================
 
 library(DBI)
@@ -24,7 +36,7 @@ library(mlr)
 #======================Load Libraries to use select_if==========================
 library(plyr)
 library(dplyr)
-setwd("C:/Users/chedevia/Desktop/Test")
+
 #==================Load Libraries to use Weka functions========================
 #Library to run ML Models
 library(RWeka) 
@@ -42,6 +54,8 @@ library(scales)
 library(ggplot2)
 #install.packages("formattable")
 library(formattable)
+
+
 
 #======================connect to the sqlite file===============================
 sqlite    <- dbDriver("SQLite")
@@ -206,7 +220,7 @@ rm(columns_to_change)
 rm(column_to_update)
 
 #===============================================================================
-#===================2.Machine Learning Classification===========================
+#===================2.Machine Learning Prediction Classification================
 #===============================================================================
 
 
@@ -393,13 +407,13 @@ RF_Accuracy-RF_CV_Accuracy
 RF_Accuracy-RF_Test_Accuracy
 
 #==========Now the objective is to reduce the overfitting=================
-#==========1.Eliminate redundant attributes===============================
-#==========2.Run all the models again to see if there is a new rank=======
-#==========3.Run the ensamble, boosting and bagging methods===============
-#==========4.Reduce the size of the file to reduce the noise==============
+#==========2.1.Eliminate redundant attributes=============================
+#==========2.2.Run all the models again to see if there is a new rank=====
+#==========2.3.Run the ensamble, boosting and bagging methods=============
+#==========2.4.Reduce the size of the file to reduce the noise============
 
 
-#==========1.Optimizing the attributes====================================
+#==========2.1.Optimizing the attributes==================================
 #Load correlation
 Correlation_AE <- make_Weka_attribute_evaluator("weka/attributeSelection/CorrelationAttributeEval")
 #Run Correlation
@@ -609,14 +623,14 @@ training_set = subset(DataFrame, split == TRUE)
 test_set = subset(DataFrame, split == FALSE)
 
 
-#==========2.Run all the models again to see if there is a new rank=======
+#==========2.2.Run all the models again to see if there is a new rank=====
 Germany_table<-AutoML(DataFrame,Split_Value,100,Smote_value)
 
 #Select the top 2 models
 Germany_Top_2_Models_new<-subset(Germany_table, Germany_table$Top<=3 )
 #The new best model is IBK(Nearest Neighbours) altough it's overfitting is greater than the random forest
 
-#==========3.Run the ensamble, boosting and bagging methods===============
+#==========2.3.Run the ensamble, boosting and bagging methods=============
 #Top two models to check if bagging, boosting or ensamble improves the accuracy
 Model1<-"weka.classifiers.trees.RandomForest" 
 Model2<-"weka.classifiers.lazy.IBk"
@@ -624,7 +638,7 @@ Model2<-"weka.classifiers.lazy.IBk"
 Germany_with_BBE<-Auto_ML_Bag_Bos_Ens(DataFrame,Split_Value,100,Model1,Model2,Germany_Top_2_Models_new,Smote_value)
 #It showed that the AdaBoostM1 reduces the underfitting from -4.83 to -4.53 
 
-#==========4.Reduce the size of the file to reduce the noise==============
+#==========2.4.Reduce the size of the file to reduce the noise============
 #Load sample size
 resample<-make_Weka_filter("weka/filters/supervised/instance/Resample")
 #Create a copy of the dataframe
@@ -670,7 +684,58 @@ for (i in 5:9) {
 #reducing the size of the data did not reduce the accuracy
 
 
-#====================================AdaBoostM1===========================
+#==========2.5.Tunning the random Forest model============================
+
+
+
+#Create a dataframe to record the optimal size of the dataframe
+Optimal_Tunning<-data.frame(Seed=double(),Depth=double(),Accuracy=double(),
+                               CV_Accuracy=double(),Test_Accuracy=double(),
+                               "Acc-Test"=double(),"Acc-Acc_CV"=double())
+
+#Find the most optimal size of the file that reduces the overfitting.
+#"p" represent the maximum depth of the tree and "i" the number of random seed number for selecting
+#attributes
+
+for (p in 1:10) {
+  
+  for(i in 1:4) {
+  
+  #Run the RandomForest
+  RandomForest_Classifier<-RandomForest(training_set$target~ ., data = training_set,
+                                        Weka_control(depth=p,S=i))
+  
+  RandomForest_Train<-summary(RandomForest_Classifier)
+  RF_Accuracy<-RandomForest_Train$details[1]
+  #Cross Validation
+  RandomForest_CV <- evaluate_Weka_classifier(RandomForest_Classifier, numFolds = 10,
+                                              complexity = FALSE, seed = 1, class = TRUE)
+  #Accuracy CV
+  RF_CV_Accuracy<-RandomForest_CV$details[1]
+  RandomForest_Test<-table( predict(RandomForest_Classifier,newdata=test_set),
+                            test_set$target )
+  
+  #Record Depth and Seed
+  Depth<-p
+  Seed<-i
+  
+  #Accuracy Test
+  RF_Test_Accuracy<-(RandomForest_Test[1,1]+RandomForest_Test[2,2])/(
+    RandomForest_Test[1,1]+RandomForest_Test[2,2]+
+      RandomForest_Test[2,1]+RandomForest_Test[2,1])*10
+  
+  #Record the results in the Dataframe
+  Optimal_Tunning[nrow(Optimal_Tunning) + 1,] <-list(
+    Seed=double(),Depth=double(),Accuracy=RF_Accuracy,
+    CV_Accuracy=  RF_CV_Accuracy,Test_Accuracy=RF_Test_Accuracy,
+    "Acc-Test"=RF_Accuracy-RF_Test_Accuracy,
+    "Acc-Acc_CV"=RF_Accuracy-RF_CV_Accuracy)
+  }
+}
+
+
+
+#======================Creating the final Model===========================
 
 
 train_file_clean<-training_set
@@ -710,7 +775,7 @@ Games_text$Probability<-as.numeric(Games_text$Probability)
 write.table(Games_text, file = "C:/Users/chedevia/Desktop/Test/Games1.dzn",  sep="\t",col.names = TRUE,qmethod = "double") 
 
 #==================================================================================
-#===========================Running Optimization of bets===========================
+#===================3.Optimization Using Operations Research=======================
 #==================================================================================
 
 #To select the games to bet to reduce the risk and maximize the profit a model in Minizinc 
