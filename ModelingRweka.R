@@ -411,7 +411,7 @@ RF_Accuracy-RF_Test_Accuracy
 #==========2.2.Run all the models again to see if there is a new rank=====
 #==========2.3.Run the ensamble, boosting and bagging methods=============
 #==========2.4.Reduce the size of the file to reduce the noise============
-
+#==========2.5.Tunning the random Forest model============================
 
 #==========2.1.Optimizing the attributes==================================
 #Load correlation
